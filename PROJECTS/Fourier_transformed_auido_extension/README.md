@@ -87,11 +87,11 @@ git clone <repository-url>
 cd dfta-audio-compression
 
 # Build encoder
-cd encoder
+cd encoder_part
 make
 
 # Build decoder  
-cd ../decoder
+cd ../decoder_part
 make
 
 # Or build both manually:
