@@ -12,7 +12,7 @@ int write_wav_file(const char* filename, const AudioData* audio_data) {
     
     FILE* file = fopen(filename, "wb");
     if (!file) {
-        fprintf(stderr, "Error: Cannot create output file %s\n", filename);
+        fprintf(stderr, "Error: Cannot create output file '%s'\n", filename);
         return DFTA_ERROR_FILE_WRITE;
     }
     
@@ -46,7 +46,7 @@ int write_wav_file(const char* filename, const AudioData* audio_data) {
     
     // Convert and write audio data
     if (audio_data->bits_per_sample == 16) {
-        int16_t* temp_buffer = malloc(data_size);
+        int16_t* temp_buffer = malloc(audio_data->sample_count * sizeof(int16_t) * audio_data->channels);
         if (!temp_buffer) {
             fclose(file);
             return DFTA_ERROR_MEMORY;
@@ -71,7 +71,8 @@ int write_wav_file(const char* filename, const AudioData* audio_data) {
             }
         }
         
-        if (fwrite(temp_buffer, 1, data_size, file) != data_size) {
+        size_t expected_bytes = audio_data->sample_count * sizeof(int16_t) * audio_data->channels;
+        if (fwrite(temp_buffer, 1, expected_bytes, file) != expected_bytes) {
             fprintf(stderr, "Error: Failed to write audio data\n");
             free(temp_buffer);
             fclose(file);
