@@ -1,4 +1,5 @@
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,7 @@ int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio
     
     FILE* file = fopen(filename, "rb");
     if (!file) {
-        fprintf(stderr, "Error: Cannot open FTAE file %s\n", filename);
+        fprintf(stderr, "Error: Cannot open FTAE file '%s'\n", filename);
         return DFTA_ERROR_FILE_READ;
     }
     
@@ -38,22 +39,22 @@ int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio
     
     // Validate FTAE format
     if (strncmp(header.magic, "FTAE", 4) != 0) {
-        fprintf(stderr, "Error: Invalid FTAE file format\n");
+        fprintf(stderr, "Error: Invalid FTAE file format (not an FTAE file)\n");
         fclose(file);
         return DFTA_ERROR_FORMAT;
     }
     
     if (header.version != 1) {
-        fprintf(stderr, "Error: Unsupported FTAE version %u\n", header.version);
+        fprintf(stderr, "Error: Unsupported FTAE version %u (expected version 1)\n", header.version);
         fclose(file);
         return DFTA_ERROR_FORMAT;
     }
     
-    printf("FTAE File Info:\n");
-    printf("  Version: %u\n", header.version);
+    printf("\nFTAE File Information:\n");
+    printf("  Format Version: %u\n", header.version);
     printf("  Sample Rate: %u Hz\n", header.sample_rate);
     printf("  Duration: %.2f seconds\n", header.duration);
-    printf("  Wave Components: %u\n", header.wave_count);
+    printf("  Frequency Components: %u\n", header.wave_count);
     printf("  Compression Level: %u\n", header.compression_level);
     printf("  Amplitude Threshold: %.4f\n", header.amplitude_threshold);
     
@@ -65,6 +66,7 @@ int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio
     }
     
     // Read SineWave data
+    printf("Loading frequency components...\n");
     for (uint32_t i = 0; i < header.wave_count; i++) {
         SineWave wave;
         if (fread(&wave, sizeof(SineWave), 1, file) != 1) {
@@ -76,6 +78,11 @@ int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio
         }
         
         enqueue_sinewave(*queue, &wave);
+        
+        // Progress indicator
+        if ((i + 1) % 1000 == 0) {
+            printf("  Loaded %u/%u components\n", i + 1, header.wave_count);
+        }
     }
     
     fclose(file);
@@ -94,6 +101,6 @@ int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio
         return DFTA_ERROR_MEMORY;
     }
     
-    printf("Successfully loaded %u SineWave components\n", header.wave_count);
+    printf("Successfully loaded %u frequency components\n", header.wave_count);
     return DFTA_SUCCESS;
 }
