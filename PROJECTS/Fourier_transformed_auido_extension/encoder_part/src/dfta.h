@@ -1,10 +1,14 @@
-
+ 
 #ifndef DFTA_H
 #define DFTA_H
 
 #include <stdint.h>
 #include <complex.h>
+
+#ifndef M_PI
 #define M_PI 3.14159265358979323846
+#endif
+
 // Compression levels
 #define COMPRESSION_LOW    0
 #define COMPRESSION_MEDIUM 1
@@ -74,12 +78,9 @@ typedef struct {
     int count;
 } SineWaveQueue;
 
-// Function declarations
+// Function declarations - ENCODER ONLY
 int encode_audio_file(const char* input_file, const char* output_file, const EncodingConfig* config);
-int decode_audio_file(const char* input_file, const char* output_file);
 int read_wav_file(const char* filename, AudioData* audio_data);
-int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio_info);
-int write_wav_file(const char* filename, const AudioData* audio_data);
 int write_ftae_file(const char* filename, SineWaveQueue* queue, const AudioData* original_audio, const EncodingConfig* config);
 void free_audio_data(AudioData* audio_data);
 
@@ -104,8 +105,5 @@ float calculate_signal_complexity(const float* samples, int window_size);
 void extract_sinewave_components(const double complex* fft_data, int fft_size, 
                                 float sample_rate, float start_time, float duration,
                                 SineWaveQueue* queue);
-
-// Synthesis functions
-int synthesize_audio_from_sinewaves(SineWaveQueue* queue, AudioData* output_audio);
 
 #endif // DFTA_H
