@@ -1,14 +1,12 @@
 
 #ifndef DFTA_H
 #define DFTA_H
-#define M_PI 3.14159265358979323846
-#include <stdint.h>
-#include <complex.h>
 
-// Compression levels
-#define COMPRESSION_LOW    0
-#define COMPRESSION_MEDIUM 1
-#define COMPRESSION_HIGH   2
+#include <stdint.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // Error codes
 #define DFTA_SUCCESS           0
@@ -52,16 +50,6 @@ typedef struct {
     uint16_t bits_per_sample;
 } AudioData;
 
-// Encoding configuration
-typedef struct {
-    int compression_level;
-    float amplitude_threshold;
-    float frequency_min;
-    float frequency_max;
-    float phase_tolerance;
-    float similarity_threshold;
-} EncodingConfig;
-
 // SineWave queue for managing frequency components
 typedef struct SineWaveNode {
     SineWave wave;
@@ -74,36 +62,16 @@ typedef struct {
     int count;
 } SineWaveQueue;
 
-// Function declarations
-int encode_audio_file(const char* input_file, const char* output_file, const EncodingConfig* config);
+// Function declarations - DECODER ONLY
 int decode_audio_file(const char* input_file, const char* output_file);
-int read_wav_file(const char* filename, AudioData* audio_data);
 int read_ftae_file(const char* filename, SineWaveQueue** queue, AudioData* audio_info);
 int write_wav_file(const char* filename, const AudioData* audio_data);
-int write_ftae_file(const char* filename, SineWaveQueue* queue, const AudioData* original_audio, const EncodingConfig* config);
 void free_audio_data(AudioData* audio_data);
-
-// FFT functions
-void fft_radix2(double complex* data, int n, int inverse);
-int next_power_of_2(int n);
-int adaptive_window_size(const float* samples, int start, int max_size, int sample_rate);
 
 // SineWave queue functions
 SineWaveQueue* create_sinewave_queue(void);
 void enqueue_sinewave(SineWaveQueue* queue, const SineWave* wave);
 void free_sinewave_queue(SineWaveQueue* queue);
-
-// Filtering and optimization functions
-void apply_frequency_filtering(SineWaveQueue* queue, float min_freq, float max_freq);
-void apply_amplitude_filtering(SineWaveQueue* queue, float threshold);
-void apply_phase_optimization(SineWaveQueue* queue, float tolerance);
-void apply_similarity_filtering(SineWaveQueue* queue, float threshold);
-
-// Analysis functions
-float calculate_signal_complexity(const float* samples, int window_size);
-void extract_sinewave_components(const double complex* fft_data, int fft_size, 
-                                float sample_rate, float start_time, float duration,
-                                SineWaveQueue* queue);
 
 // Synthesis functions
 int synthesize_audio_from_sinewaves(SineWaveQueue* queue, AudioData* output_audio);
