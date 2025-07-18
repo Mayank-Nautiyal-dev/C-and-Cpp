@@ -3,138 +3,139 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <complex.h>
 #include "dfta.h"
 
-// Default encoding configuration
-static const EncodingConfig default_config = {
-    .compression_level = COMPRESSION_MEDIUM,
-    .amplitude_threshold = 0.01f,
-    .frequency_min = 20.0f,
-    .frequency_max = 20000.0f,
-    .phase_tolerance = 0.1f,
-    .similarity_threshold = 0.8f
-};
+void adjust_config_for_compression_level(EncodingConfig* config) {
+    switch (config->compression_level) {
+        case COMPRESSION_LOW:
+            config->amplitude_threshold *= 0.5f;    // More lenient
+            config->similarity_threshold = 0.98f;   // Less aggressive similarity filtering
+            break;
+        case COMPRESSION_MEDIUM:
+            // Use default values
+            break;
+        case COMPRESSION_HIGH:
+            config->amplitude_threshold *= 2.0f;    // More aggressive
+            config->similarity_threshold = 0.90f;   // More aggressive similarity filtering
+            break;
+    }
+}
 
 int encode_audio_file(const char* input_file, const char* output_file, const EncodingConfig* config) {
-    if (!input_file || !output_file) {
-        return DFTA_ERROR_FILE_READ;
-    }
-    
-    if (!config) {
-        config = &default_config;
-    }
-    
-    printf("Starting DFTA encoding...\n");
-    printf("Input: %s\n", input_file);
-    printf("Output: %s\n", output_file);
-    
-    // Read WAV file
     AudioData audio_data = {0};
-    int result = read_wav_file(input_file, &audio_data);
+    SineWaveQueue* wave_queue = NULL;
+    int result = DFTA_SUCCESS;
+    
+    // Read input WAV file
+    result = read_wav_file(input_file, &audio_data);
     if (result != DFTA_SUCCESS) {
-        return result;
+        goto cleanup;
     }
     
-    // Create SineWave queue for storing components
-    SineWaveQueue* queue = create_sinewave_queue();
-    if (!queue) {
-        free_audio_data(&audio_data);
-        return DFTA_ERROR_MEMORY;
+    // Create SineWave queue
+    wave_queue = create_sinewave_queue();
+    if (!wave_queue) {
+        result = DFTA_ERROR_MEMORY;
+        goto cleanup;
     }
+    
+    // Make a copy of config to adjust for compression level
+    EncodingConfig working_config = *config;
+    adjust_config_for_compression_level(&working_config);
+    
+    printf("\nStarting FFT analysis with adaptive windowing...\n");
     
     // Process audio in overlapping windows
-    int window_size = 2048;  // Base window size
-    int hop_size = window_size / 4;  // 75% overlap
-    int fft_size = next_power_of_2(window_size * 2);
+    int sample_pos = 0;
+    int window_count = 0;
+    const float overlap = 0.5f;  // 50% overlap
     
-    printf("Processing audio with window size: %d, FFT size: %d\n", window_size, fft_size);
-    
-    double complex* fft_buffer = malloc(fft_size * sizeof(double complex));
-    if (!fft_buffer) {
-        free_sinewave_queue(queue);
-        free_audio_data(&audio_data);
-        return DFTA_ERROR_MEMORY;
-    }
-    
-    int windows_processed = 0;
-    
-    for (uint32_t pos = 0; pos < audio_data.sample_count - window_size; pos += hop_size) {
-        // Adaptive window sizing based on signal complexity
-        int adaptive_size = adaptive_window_size(audio_data.samples + pos, 
-                                                window_size, 
-                                                fmaxf(window_size, audio_data.sample_count - pos),
-                                                audio_data.sample_rate);
+    while (sample_pos < (int)audio_data.sample_count) {
+        // Determine adaptive window size
+        int remaining_samples = audio_data.sample_count - sample_pos;
+        int window_size = adaptive_window_size(audio_data.samples, sample_pos, 
+                                             remaining_samples, audio_data.sample_rate);
         
-        if (adaptive_size > fft_size / 2) {
-            adaptive_size = fft_size / 2;
+        if (window_size < 64) break;  // Too small to process meaningfully
+        
+        // Ensure window size is power of 2
+        window_size = next_power_of_2(window_size);
+        if (window_size > remaining_samples) {
+            window_size = next_power_of_2(remaining_samples / 2);
         }
         
-        // Clear FFT buffer
-        memset(fft_buffer, 0, fft_size * sizeof(double complex));
+        if (window_size < 64) break;
         
-        // Apply Hanning window and copy to FFT buffer
-        for (int i = 0; i < adaptive_size && (pos + i) < audio_data.sample_count; i++) {
-            double window_coeff = 0.5 * (1.0 - cos(2.0 * M_PI * i / (adaptive_size - 1)));
-            fft_buffer[i] = audio_data.samples[pos + i] * window_coeff;
+        // Prepare FFT input data
+        double complex* fft_data = calloc(window_size, sizeof(double complex));
+        if (!fft_data) {
+            result = DFTA_ERROR_MEMORY;
+            goto cleanup;
+        }
+        
+        // Copy audio samples to FFT buffer with windowing
+        for (int i = 0; i < window_size && (sample_pos + i) < (int)audio_data.sample_count; i++) {
+            // Apply Hann window to reduce spectral leakage
+            float window_func = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (window_size - 1)));
+            fft_data[i] = audio_data.samples[sample_pos + i] * window_func;
         }
         
         // Perform FFT
-        fft_radix2(fft_buffer, fft_size, 0);
+        fft_radix2(fft_data, window_size, 0);
         
-        // Extract sine wave components
-        float start_time = (float)pos / audio_data.sample_rate;
-        float duration = (float)adaptive_size / audio_data.sample_rate;
+        // Extract SineWave components
+        float start_time = (float)sample_pos / audio_data.sample_rate;
+        float duration = (float)window_size / audio_data.sample_rate;
         
-        extract_sinewave_components(fft_buffer, fft_size, 
-                                  audio_data.sample_rate, 
-                                  start_time, duration, queue);
+        extract_sinewave_components(fft_data, window_size, (float)audio_data.sample_rate,
+                                  start_time, duration, wave_queue);
         
-        windows_processed++;
+        free(fft_data);
         
-        // Progress indicator
-        if (windows_processed % 100 == 0) {
-            float progress = (float)pos / audio_data.sample_count * 100;
-            printf("Progress: %.1f%%, Components found: %d\n", progress, queue->count);
+        // Move to next window with overlap
+        sample_pos += (int)(window_size * (1.0f - overlap));
+        window_count++;
+        
+        if (window_count % 100 == 0) {
+            printf("  Processed %d windows, %d components so far\n", window_count, wave_queue->count);
         }
     }
     
-    free(fft_buffer);
+    printf("FFT analysis complete. Generated %d raw components from %d windows\n", 
+           wave_queue->count, window_count);
     
-    printf("Analysis complete. Found %d raw components\n", queue->count);
+    // Apply filtering and optimization
+    printf("\nApplying filters and optimizations...\n");
     
-    // Apply filtering based on compression level
-    switch (config->compression_level) {
-        case COMPRESSION_HIGH:
-            apply_amplitude_filtering(queue, config->amplitude_threshold * 2.0f);
-            apply_frequency_filtering(queue, config->frequency_min * 2.0f, config->frequency_max * 0.8f);
-            apply_similarity_filtering(queue, config->similarity_threshold * 0.8f);
-            apply_phase_optimization(queue, config->phase_tolerance);
-            break;
-            
-        case COMPRESSION_MEDIUM:
-            apply_amplitude_filtering(queue, config->amplitude_threshold);
-            apply_frequency_filtering(queue, config->frequency_min, config->frequency_max);
-            apply_similarity_filtering(queue, config->similarity_threshold);
-            break;
-            
-        case COMPRESSION_LOW:
-            apply_amplitude_filtering(queue, config->amplitude_threshold * 0.5f);
-            apply_frequency_filtering(queue, config->frequency_min, config->frequency_max);
-            break;
+    int original_count = wave_queue->count;
+    
+    // 1. Frequency filtering (human audible range)
+    apply_frequency_filtering(wave_queue, working_config.frequency_min, working_config.frequency_max);
+    
+    // 2. Amplitude filtering
+    apply_amplitude_filtering(wave_queue, working_config.amplitude_threshold);
+    
+    // 3. Phase optimization
+    apply_phase_optimization(wave_queue, working_config.phase_tolerance);
+    
+    // 4. Similarity filtering
+    apply_similarity_filtering(wave_queue, working_config.similarity_threshold);
+    
+    printf("\nOptimization complete:\n");
+    printf("  Original components: %d\n", original_count);
+    printf("  Final components: %d\n", wave_queue->count);
+    printf("  Reduction: %.1f%%\n", ((float)(original_count - wave_queue->count) / original_count) * 100);
+    
+    // Write output FTAE file
+    printf("\nWriting compressed file...\n");
+    result = write_ftae_file(output_file, wave_queue, &audio_data, &working_config);
+    
+cleanup:
+    if (wave_queue) {
+        free_sinewave_queue(wave_queue);
     }
-    
-    printf("After filtering: %d components remain\n", queue->count);
-    
-    // Write FTAE file
-    result = write_ftae_file(output_file, queue, &audio_data, config);
-    
-    // Cleanup
-    free_sinewave_queue(queue);
     free_audio_data(&audio_data);
-    
-    if (result == DFTA_SUCCESS) {
-        printf("Encoding completed successfully!\n");
-    }
     
     return result;
 }
