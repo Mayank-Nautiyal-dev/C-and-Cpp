@@ -101,5 +101,3 @@ void free_audio_data(AudioData* audio_data) {
         audio_data->sample_count = 0;
     }
 }
-
-
