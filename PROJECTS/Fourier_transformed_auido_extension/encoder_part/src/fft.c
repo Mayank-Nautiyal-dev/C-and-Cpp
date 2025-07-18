@@ -64,17 +64,19 @@ int next_power_of_2(int n) {
 }
 
 int adaptive_window_size(const float* samples, int start, int max_size, int sample_rate) {
+    (void)sample_rate; // Suppress unused parameter warning
+    
     if (!samples || max_size <= 0) return 1024;  // Default size
     
     int base_size = 1024;
     int min_size = 512;
-    int actual_max = fmin(max_size, 4096);
+    int actual_max = (max_size < 4096) ? max_size : 4096;
     
     if (actual_max < base_size) return actual_max;
     
     // Calculate signal complexity for a small window
-    int test_size = fmin(base_size, actual_max);
-    float complexity = calculate_signal_complexity(samples, test_size);
+    int test_size = (base_size < actual_max) ? base_size : actual_max;
+    float complexity = calculate_signal_complexity(&samples[start], test_size);
     
     // Adjust window size based on complexity
     int adaptive_size;
@@ -89,8 +91,7 @@ int adaptive_window_size(const float* samples, int start, int max_size, int samp
     }
     
     // Ensure size is within bounds and power of 2
-    adaptive_size = fmax(min_size, fmin(adaptive_size, actual_max));
+    adaptive_size = (min_size > adaptive_size) ? min_size : adaptive_size;
+    adaptive_size = (adaptive_size > actual_max) ? actual_max : adaptive_size;
     return next_power_of_2(adaptive_size);
 }
-
-
