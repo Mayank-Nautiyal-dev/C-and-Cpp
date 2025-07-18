@@ -322,7 +322,5 @@ make test
 ./dfta_encode test.wav test.ftae --compression-level medium  
 ./dfta_encode test.wav test.ftae --compression-level high
 ```
-</lov-write>
 
-Now let me create the decoder-specific README:
 
