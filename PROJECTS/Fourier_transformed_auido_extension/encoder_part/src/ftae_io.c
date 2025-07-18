@@ -76,4 +76,3 @@ int write_ftae_file(const char* filename, SineWaveQueue* queue,
     
     return DFTA_SUCCESS;
 }
-
