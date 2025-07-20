@@ -10,7 +10,7 @@ TARGET = dfta_encode
 all: $(TARGET)
 
 $(TARGET): $(SOURCES)
-	$(CC) $(SOURCES) -o $(TARGET) $(CFLAGS)
+	$(CC) $(SOURCES) -o $(TARGET) $(CFLAGS) -lm
 
 clean:
 	rm -f $(TARGET)
